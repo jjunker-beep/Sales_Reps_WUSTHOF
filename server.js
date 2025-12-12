@@ -83,46 +83,72 @@ app.post("/login", (req, res) => {
 app.get("/customers", async (req, res) => {
   if (!req.session.email) return res.redirect("/login");
 
+  // 1) Kunden laden (erstmal ohne Filter, damit du sicher testen kannst)
   const data = await gql(`
     query {
       customers(first: 100) {
         nodes {
           email
           displayName
-          metafield(namespace: "custom", key: "sales_rep_email") {
-            value
-          }
         }
       }
     }
   `);
 
-  const list = data.customers.nodes;
+  const customers = data.customers.nodes;
 
+  // 2) HTML ausgeben + Suchleiste
   res.send(`
-    <h2>Meine Kunden</h2>
-    ${list
-      .map(
-        (c) => `
-      <form method="post" action="/go">
-        <input type="hidden" name="email" value="${c.email}">
-        <button>${c.displayName} (${c.email})</button>
-      </form>
-    `
-      )
-      .join("")}
+    <html>
+      <head>
+        <title>Meine Kunden</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 20px; }
+          input { padding: 8px; width: 320px; margin-bottom: 16px; }
+          .customer { margin-bottom: 8px; }
+          button { padding: 8px 12px; cursor: pointer; }
+        </style>
+      </head>
+      <body>
+
+        <h2>Meine Kunden</h2>
+
+        <input
+          type="text"
+          id="search"
+          placeholder="Kunde suchen (Name oder E-Mail)"
+          onkeyup="filterCustomers()"
+        />
+
+        <div id="customer-list">
+          ${customers
+            .map(
+              (c) => `
+            <div class="customer">
+              <form method="post" action="/go">
+                <input type="hidden" name="email" value="${c.email}">
+                <button type="submit">
+                  ${c.displayName} (${c.email})
+                </button>
+              </form>
+            </div>
+          `
+            )
+            .join("")}
+        </div>
+
+        <script>
+          function filterCustomers() {
+            const q = document.getElementById("search").value.toLowerCase();
+            document.querySelectorAll(".customer").forEach(el => {
+              el.style.display = el.innerText.toLowerCase().includes(q)
+                ? "block"
+                : "none";
+            });
+          }
+        </script>
+
+      </body>
+    </html>
   `);
-});
-
-app.post("/go", (req, res) => {
-  const token = multipass({
-    email: req.body.email,
-    created_at: new Date().toISOString(),
-  });
-  res.redirect(`https://${SHOP}/account/login/multipass/${token}`);
-});
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log("Sales portal running on port", PORT);
 });
