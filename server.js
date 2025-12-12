@@ -21,7 +21,8 @@ app.use(
 );
 
 // ================= CONFIG =================
-const SHOP = process.env.SHOPIFY_SHOP; // myshopify.com Domain!
+// WICHTIG: Admin API immer über myshopify.com
+const SHOP = process.env.SHOPIFY_SHOP; // z.B. wusthof-wholesale-germany.myshopify.com
 const TOKEN = process.env.SHOPIFY_ADMIN_ACCESS_TOKEN;
 const API_VERSION = process.env.SHOPIFY_API_VERSION || "2025-01";
 const HASH = bcrypt.hashSync(
@@ -64,6 +65,12 @@ async function fetchCustomers(after = null) {
           email
           displayName
           note
+          metafields(first: 10, namespace: "custom") {
+            nodes {
+              key
+              value
+            }
+          }
         }
       }
     }
@@ -71,7 +78,7 @@ async function fetchCustomers(after = null) {
   return gql(query);
 }
 
-async function getAllCustomers(limit = 500) {
+async function getAllCustomers(limit = 1000) {
   let all = [];
   let after = null;
   let hasNext = true;
@@ -86,6 +93,20 @@ async function getAllCustomers(limit = 500) {
   }
 
   return all;
+}
+
+// ================= SALES-REP FILTER =================
+function customerBelongsToRep(customer, repEmail) {
+  const mf = customer.metafields?.nodes?.find(
+    (m) => m.key === "sales_reps"
+  );
+  if (!mf || !mf.value) return false;
+
+  return mf.value
+    .toLowerCase()
+    .split(/[\n,;]/) // erlaubt Zeilenumbruch, Komma, Semikolon
+    .map((v) => v.trim())
+    .includes(repEmail.toLowerCase());
 }
 
 // ================= MULTIPASS =================
@@ -130,16 +151,20 @@ app.post("/login", (req, res) => {
   if (!bcrypt.compareSync(req.body.password, HASH)) {
     return res.send("Falsches Passwort");
   }
-
   req.session.email = req.body.email.toLowerCase();
   res.redirect("/customers");
 });
 
-// -------- CUSTOMERS --------
+// -------- CUSTOMERS (mit Sales-Rep-Filter) --------
 app.get("/customers", async (req, res) => {
   if (!req.session.email) return res.redirect("/login");
 
-  const customers = await getAllCustomers(500);
+  const allCustomers = await getAllCustomers(1000);
+
+  // 🔐 ZUORDNUNG ÜBER METAFELD custom.sales_reps
+  const customers = allCustomers.filter((c) =>
+    customerBelongsToRep(c, req.session.email)
+  );
 
   res.send(`
 <!DOCTYPE html>
@@ -148,10 +173,11 @@ app.get("/customers", async (req, res) => {
   <title>Meine Kunden</title>
   <style>
     body { font-family: Arial, sans-serif; padding: 20px; }
-    input { padding: 8px; width: 380px; margin-bottom: 16px; }
+    input { padding: 8px; width: 420px; margin-bottom: 16px; }
     .customer { margin-bottom: 10px; }
     button { padding: 8px 12px; cursor: pointer; }
     .note { color: #555; font-size: 13px; margin-left: 6px; }
+    .empty { color: #777; margin-top: 20px; }
   </style>
 </head>
 <body>
@@ -166,25 +192,25 @@ app.get("/customers", async (req, res) => {
 />
 
 <div id="customer-list">
-  ${customers
-    .map(
-      (c) => `
+  ${
+    customers.length
+      ? customers
+          .map(
+            (c) => `
     <div class="customer">
       <form method="post" action="/go">
         <input type="hidden" name="email" value="${c.email}">
         <button type="submit">
           ${c.displayName || "(ohne Namen)"} (${c.email})
         </button>
-        ${
-          c.note
-            ? `<span class="note">– Nr.: ${c.note}</span>`
-            : ""
-        }
+        ${c.note ? `<span class="note">– Nr.: ${c.note}</span>` : ""}
       </form>
     </div>
   `
-    )
-    .join("")}
+          )
+          .join("")
+      : `<div class="empty">Keine Kunden zugeordnet.</div>`
+  }
 </div>
 
 <script>
@@ -210,9 +236,8 @@ app.post("/go", (req, res) => {
     created_at: new Date().toISOString(),
   });
 
-  res.redirect(
-    `https://${SHOP}/account/login/multipass/${token}`
-  );
+  // Multipass-Login nutzt eure Custom Domain automatisch
+  res.redirect(`https://${process.env.SHOPIFY_CUSTOM_DOMAIN || "b2b.wusthof.com"}/account/login/multipass/${token}`);
 });
 
 // ================= START =================
