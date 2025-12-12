@@ -9,9 +9,13 @@ import bcrypt from "bcryptjs";
 dotenv.config();
 
 const app = express();
+
+/* ================= MIDDLEWARE ================= */
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cookieParser());
+app.use(express.static("public")); // für Logo
+
 app.use(
   session({
     secret: process.env.SESSION_SECRET || "dev-secret",
@@ -20,14 +24,17 @@ app.use(
   })
 );
 
-// ================= CONFIG =================
-const SHOP = process.env.SHOPIFY_SHOP;
+/* ================= CONFIG ================= */
+const SHOP = process.env.SHOPIFY_SHOP; // *.myshopify.com
 const TOKEN = process.env.SHOPIFY_ADMIN_ACCESS_TOKEN;
 const API_VERSION = process.env.SHOPIFY_API_VERSION || "2025-01";
-const HASH = bcrypt.hashSync(process.env.SALES_REP_PASSWORD || "WUSTHOF1!", 10);
+const HASH = bcrypt.hashSync(
+  process.env.SALES_REP_PASSWORD || "WUSTHOF1!",
+  10
+);
 
-// ================= TRANSLATIONS =================
-const t = {
+/* ================= TRANSLATIONS ================= */
+const T = {
   de: {
     title: "Meine Kunden",
     search: "Kunde suchen (Name, Firma, E-Mail, Kundennummer)",
@@ -61,10 +68,10 @@ const t = {
 };
 
 function lang(req) {
-  return t[req.session.lang] || t.en;
+  return T[req.session.lang] || T.en;
 }
 
-// ================= SHOPIFY GQL =================
+/* ================= SHOPIFY GRAPHQL ================= */
 async function gql(query) {
   const r = await fetch(
     `https://${SHOP}/admin/api/${API_VERSION}/graphql.json`,
@@ -82,7 +89,7 @@ async function gql(query) {
   return j.data;
 }
 
-// ================= PAGINATION =================
+/* ================= PAGINATION ================= */
 async function fetchCustomers(after = null) {
   return gql(`
     query {
@@ -103,7 +110,10 @@ async function fetchCustomers(after = null) {
 }
 
 async function getAllCustomers(limit = 1000) {
-  let all = [], after = null, hasNext = true;
+  let all = [];
+  let after = null;
+  let hasNext = true;
+
   while (hasNext && all.length < limit) {
     const data = await fetchCustomers(after);
     all.push(...data.customers.nodes);
@@ -113,36 +123,51 @@ async function getAllCustomers(limit = 1000) {
   return all;
 }
 
-// ================= SALES REP FILTER =================
+/* ================= SALES REP FILTER ================= */
 function customerBelongsToRep(customer, repEmail) {
-  const mf = customer.metafields?.nodes?.find(m => m.key === "sales_reps");
+  const mf = customer.metafields?.nodes?.find(
+    (m) => m.key === "sales_reps"
+  );
   if (!mf?.value) return false;
+
   return mf.value
     .toLowerCase()
     .split(/[\n,;]/)
-    .map(v => v.trim())
+    .map((v) => v.trim())
     .includes(repEmail.toLowerCase());
 }
 
-// ================= MULTIPASS =================
+/* ================= MULTIPASS ================= */
 function multipass(payload) {
-  const key = crypto.createHash("sha256").update(process.env.MULTIPASS_SECRET).digest();
+  const key = crypto
+    .createHash("sha256")
+    .update(process.env.MULTIPASS_SECRET)
+    .digest();
+
   const iv = crypto.randomBytes(16);
-  const cipher = crypto.createCipheriv("aes-128-cbc", key.slice(0,16), iv);
-  const encrypted = Buffer.concat([cipher.update(JSON.stringify(payload)), cipher.final()]);
-  const sig = crypto.createHmac("sha256", key.slice(16)).update(Buffer.concat([iv, encrypted])).digest();
+  const cipher = crypto.createCipheriv("aes-128-cbc", key.slice(0, 16), iv);
+  const encrypted = Buffer.concat([
+    cipher.update(JSON.stringify(payload)),
+    cipher.final(),
+  ]);
+
+  const sig = crypto
+    .createHmac("sha256", key.slice(16))
+    .update(Buffer.concat([iv, encrypted]))
+    .digest();
+
   return Buffer.concat([iv, encrypted, sig]).toString("base64url");
 }
 
-// ================= ROUTES =================
+/* ================= ROUTES ================= */
 
-// -------- LANGUAGE SWITCH --------
+// ---- Language Switch
 app.get("/lang/:l", (req, res) => {
   req.session.lang = req.params.l;
   res.redirect("back");
 });
 
-// -------- LOGIN --------
+// ---- Login
 app.get("/login", (req, res) => {
   const L = lang(req);
   res.send(`
@@ -157,54 +182,90 @@ app.get("/login", (req, res) => {
 });
 
 app.post("/login", (req, res) => {
-  if (!bcrypt.compareSync(req.body.password, HASH)) return res.send("Wrong password");
+  if (!bcrypt.compareSync(req.body.password, HASH)) {
+    return res.send("Wrong password");
+  }
   req.session.email = req.body.email.toLowerCase();
   res.redirect("/customers");
 });
 
-// -------- CUSTOMERS --------
+// ---- Customers
 app.get("/customers", async (req, res) => {
   if (!req.session.email) return res.redirect("/login");
   const L = lang(req);
 
-  const customers = (await getAllCustomers())
-    .filter(c => customerBelongsToRep(c, req.session.email));
+  const customers = (await getAllCustomers()).filter((c) =>
+    customerBelongsToRep(c, req.session.email)
+  );
 
   res.send(`
 <!DOCTYPE html>
 <html>
 <head>
+<meta charset="UTF-8">
+<title>${L.title}</title>
 <style>
-body { font-family: Arial; padding:20px }
-.customer { margin-bottom:10px }
-.note, .company { font-size:13px; margin-left:6px }
+body { font-family: Arial, sans-serif; background:#f6f7f8; margin:0 }
+header { background:#fff; padding:20px; border-bottom:1px solid #ddd; display:flex; align-items:center; justify-content:space-between }
+.logo { height:40px }
+.container { max-width:1000px; margin:30px auto; padding:0 20px }
+.search { width:100%; padding:12px; margin-bottom:20px }
+.customer { background:#fff; border:1px solid #ddd; border-radius:8px; padding:14px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center }
+.meta { font-size:13px; color:#555 }
+button { padding:8px 12px; cursor:pointer }
 </style>
 </head>
+
 <body>
 
-<h2>${L.title} (${customers.length})</h2>
-<a href="/lang/de">DE</a> | <a href="/lang/en">EN</a> | <a href="/lang/fr">FR</a><br><br>
-
-<input id="search" placeholder="${L.search}" onkeyup="filter()">
-
-<div>
-${customers.length ? customers.map(c => `
-  <div class="customer">
-    <form method="post" action="/go">
-      <input type="hidden" name="email" value="${c.email}">
-      <button>${c.displayName || "-"} (${c.email})</button>
-      ${c.defaultAddress?.company ? `<span class="company">🏢 ${c.defaultAddress.company}</span>` : ""}
-      ${c.note ? `<span class="note">– ${L.customerNo}: ${c.note}</span>` : ""}
-    </form>
+<header>
+  <div style="display:flex;align-items:center;gap:20px">
+    <img src="/logo.svg" class="logo" alt="WÜSTHOF">
+    <h2>${L.title} (${customers.length})</h2>
   </div>
-`).join("") : `<p>${L.noCustomers}</p>`}
+  <div>
+    <a href="/lang/de">DE</a> |
+    <a href="/lang/en">EN</a> |
+    <a href="/lang/fr">FR</a>
+  </div>
+</header>
+
+<div class="container">
+
+<input class="search" id="search" placeholder="${L.search}" onkeyup="filter()">
+
+${
+  customers.length
+    ? customers
+        .map(
+          (c) => `
+<div class="customer">
+  <div>
+    <strong>${c.displayName || "-"}</strong>
+    <div class="meta">
+      ${c.email}
+      ${c.defaultAddress?.company ? ` · ${c.defaultAddress.company}` : ""}
+      ${c.note ? ` · ${L.customerNo}: ${c.note}` : ""}
+    </div>
+  </div>
+  <form method="post" action="/go">
+    <input type="hidden" name="email" value="${c.email}">
+    <button>Login</button>
+  </form>
+</div>
+`
+        )
+        .join("")
+    : `<p>${L.noCustomers}</p>`
+}
+
 </div>
 
 <script>
 function filter(){
   const q=document.getElementById("search").value.toLowerCase();
   document.querySelectorAll(".customer").forEach(c=>{
-    c.style.display=c.innerText.toLowerCase().includes(q)?"block":"none";
+    c.style.display=c.innerText.toLowerCase().includes(q)?"flex":"none";
   });
 }
 </script>
@@ -214,13 +275,19 @@ function filter(){
 `);
 });
 
-// -------- GO --------
+// ---- Multipass
 app.post("/go", (req, res) => {
-  const token = multipass({ email: req.body.email, created_at: new Date().toISOString() });
-  res.redirect(`https://${process.env.SHOPIFY_CUSTOM_DOMAIN || "b2b.wusthof.com"}/account/login/multipass/${token}`);
+  const token = multipass({
+    email: req.body.email,
+    created_at: new Date().toISOString(),
+  });
+
+  res.redirect(
+    \`https://\${process.env.SHOPIFY_CUSTOM_DOMAIN || "b2b.wusthof.com"}/account/login/multipass/\${token}\`
+  );
 });
 
-// ================= START =================
+/* ================= START ================= */
 app.listen(process.env.PORT || 10000, () =>
   console.log("Sales portal running")
 );
