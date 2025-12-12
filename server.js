@@ -51,6 +51,42 @@ async function gql(query) {
   return j.data;
 }
 
+// ================= PAGINATION =================
+async function fetchCustomers(after = null) {
+  const query = `
+    query {
+      customers(first: 100${after ? `, after: "${after}"` : ""}) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        nodes {
+          email
+          displayName
+        }
+      }
+    }
+  `;
+  return gql(query);
+}
+
+async function getAllCustomers(limit = 500) {
+  let all = [];
+  let after = null;
+  let hasNext = true;
+
+  while (hasNext && all.length < limit) {
+    const data = await fetchCustomers(after);
+    const conn = data.customers;
+
+    all.push(...conn.nodes);
+    hasNext = conn.pageInfo.hasNextPage;
+    after = conn.pageInfo.endCursor;
+  }
+
+  return all;
+}
+
 // ================= MULTIPASS =================
 function multipass(payload) {
   const key = crypto
@@ -102,19 +138,8 @@ app.post("/login", (req, res) => {
 app.get("/customers", async (req, res) => {
   if (!req.session.email) return res.redirect("/login");
 
-  // ⚠️ absichtlich OHNE Filter → Test-Modus
-  const data = await gql(`
-    query {
-      customers(first: 100) {
-        nodes {
-          email
-          displayName
-        }
-      }
-    }
-  `);
-
-  const customers = data.customers.nodes;
+  // 🔥 HIER: alle Kunden via Pagination (max 500)
+  const customers = await getAllCustomers(500);
 
   res.send(`
 <!DOCTYPE html>
@@ -123,14 +148,14 @@ app.get("/customers", async (req, res) => {
   <title>Meine Kunden</title>
   <style>
     body { font-family: Arial, sans-serif; padding: 20px; }
-    input { padding: 8px; width: 340px; margin-bottom: 16px; }
+    input { padding: 8px; width: 360px; margin-bottom: 16px; }
     .customer { margin-bottom: 8px; }
     button { padding: 8px 12px; cursor: pointer; }
   </style>
 </head>
 <body>
 
-<h2>Meine Kunden</h2>
+<h2>Meine Kunden (${customers.length})</h2>
 
 <input
   type="text"
