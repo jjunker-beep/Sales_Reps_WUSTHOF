@@ -85,7 +85,7 @@ app.get("/customers", async (req, res) => {
 
   const data = await gql(`
     query {
-      customers(first: 1000) {
+      customers(first: 100) {
         nodes {
           email
           displayName
