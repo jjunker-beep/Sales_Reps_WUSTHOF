@@ -26,6 +26,10 @@ const TOKEN = process.env.SHOPIFY_ADMIN_ACCESS_TOKEN;
 const API_VERSION = process.env.SHOPIFY_API_VERSION || "2025-01";
 const HASH = bcrypt.hashSync(process.env.SALES_REP_PASSWORD || "WUSTHOF1!", 10);
 
+// 👉 LOGO (bitte ggf. echte Asset-URL einsetzen)
+const LOGO_URL =
+  "https://cdn.shopify.com/s/files/1/0000/0000/files/wusthof-logo.png";
+
 // ================= TRANSLATIONS =================
 const t = {
   de: {
@@ -103,7 +107,10 @@ async function fetchCustomers(after = null) {
 }
 
 async function getAllCustomers(limit = 1000) {
-  let all = [], after = null, hasNext = true;
+  let all = [];
+  let after = null;
+  let hasNext = true;
+
   while (hasNext && all.length < limit) {
     const data = await fetchCustomers(after);
     all.push(...data.customers.nodes);
@@ -115,22 +122,37 @@ async function getAllCustomers(limit = 1000) {
 
 // ================= SALES REP FILTER =================
 function customerBelongsToRep(customer, repEmail) {
-  const mf = customer.metafields?.nodes?.find(m => m.key === "sales_reps");
+  const mf = customer.metafields?.nodes?.find(
+    (m) => m.key === "sales_reps"
+  );
   if (!mf?.value) return false;
+
   return mf.value
     .toLowerCase()
     .split(/[\n,;]/)
-    .map(v => v.trim())
+    .map((v) => v.trim())
     .includes(repEmail.toLowerCase());
 }
 
 // ================= MULTIPASS =================
 function multipass(payload) {
-  const key = crypto.createHash("sha256").update(process.env.MULTIPASS_SECRET).digest();
+  const key = crypto
+    .createHash("sha256")
+    .update(process.env.MULTIPASS_SECRET)
+    .digest();
+
   const iv = crypto.randomBytes(16);
-  const cipher = crypto.createCipheriv("aes-128-cbc", key.slice(0,16), iv);
-  const encrypted = Buffer.concat([cipher.update(JSON.stringify(payload)), cipher.final()]);
-  const sig = crypto.createHmac("sha256", key.slice(16)).update(Buffer.concat([iv, encrypted])).digest();
+  const cipher = crypto.createCipheriv("aes-128-cbc", key.slice(0, 16), iv);
+  const encrypted = Buffer.concat([
+    cipher.update(JSON.stringify(payload)),
+    cipher.final(),
+  ]);
+
+  const sig = crypto
+    .createHmac("sha256", key.slice(16))
+    .update(Buffer.concat([iv, encrypted]))
+    .digest();
+
   return Buffer.concat([iv, encrypted, sig]).toString("base64url");
 }
 
@@ -146,18 +168,42 @@ app.get("/lang/:l", (req, res) => {
 app.get("/login", (req, res) => {
   const L = lang(req);
   res.send(`
-    <h2>${L.loginTitle}</h2>
-    <a href="/lang/de">DE</a> | <a href="/lang/en">EN</a> | <a href="/lang/fr">FR</a>
-    <form method="post">
-      <input name="email" placeholder="${L.email}" required><br><br>
-      <input name="password" type="password" placeholder="${L.password}" required><br><br>
-      <button>${L.login}</button>
-    </form>
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body { font-family: Arial; padding:40px; }
+  .header { margin-bottom:30px; }
+  .logo { height:48px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <img src="${LOGO_URL}" alt="WÜSTHOF" class="logo">
+</div>
+
+<h2>${L.loginTitle}</h2>
+
+<a href="/lang/de">DE</a> |
+<a href="/lang/en">EN</a> |
+<a href="/lang/fr">FR</a>
+
+<form method="post">
+  <br>
+  <input name="email" placeholder="${L.email}" required><br><br>
+  <input name="password" type="password" placeholder="${L.password}" required><br><br>
+  <button>${L.login}</button>
+</form>
+
+</body>
+</html>
   `);
 });
 
 app.post("/login", (req, res) => {
-  if (!bcrypt.compareSync(req.body.password, HASH)) return res.send("Wrong password");
+  if (!bcrypt.compareSync(req.body.password, HASH))
+    return res.send("Wrong password");
   req.session.email = req.body.email.toLowerCase();
   res.redirect("/customers");
 });
@@ -167,37 +213,62 @@ app.get("/customers", async (req, res) => {
   if (!req.session.email) return res.redirect("/login");
   const L = lang(req);
 
-  const customers = (await getAllCustomers())
-    .filter(c => customerBelongsToRep(c, req.session.email));
+  const customers = (await getAllCustomers()).filter((c) =>
+    customerBelongsToRep(c, req.session.email)
+  );
 
   res.send(`
 <!DOCTYPE html>
 <html>
 <head>
 <style>
-body { font-family: Arial; padding:20px }
-.customer { margin-bottom:10px }
-.note, .company { font-size:13px; margin-left:6px }
+body { font-family: Arial; padding:20px; }
+.header {
+  display:flex;
+  align-items:center;
+  gap:20px;
+  margin-bottom:24px;
+}
+.logo { height:42px; }
+.customer { margin-bottom:10px; }
+.note, .company { font-size:13px; margin-left:6px; }
 </style>
 </head>
 <body>
 
-<h2>${L.title} (${customers.length})</h2>
-<a href="/lang/de">DE</a> | <a href="/lang/en">EN</a> | <a href="/lang/fr">FR</a><br><br>
+<div class="header">
+  <img src="${LOGO_URL}" alt="WÜSTHOF" class="logo">
+  <h2>${L.title} (${customers.length})</h2>
+</div>
+
+<a href="/lang/de">DE</a> |
+<a href="/lang/en">EN</a> |
+<a href="/lang/fr">FR</a><br><br>
 
 <input id="search" placeholder="${L.search}" onkeyup="filter()">
 
 <div>
-${customers.length ? customers.map(c => `
-  <div class="customer">
-    <form method="post" action="/go">
-      <input type="hidden" name="email" value="${c.email}">
-      <button>${c.displayName || "-"} (${c.email})</button>
-      ${c.defaultAddress?.company ? `<span class="company">🏢 ${c.defaultAddress.company}</span>` : ""}
-      ${c.note ? `<span class="note">– ${L.customerNo}: ${c.note}</span>` : ""}
-    </form>
-  </div>
-`).join("") : `<p>${L.noCustomers}</p>`}
+${
+  customers.length
+    ? customers
+        .map(
+          (c) => `
+<div class="customer">
+  <form method="post" action="/go">
+    <input type="hidden" name="email" value="${c.email}">
+    <button>${c.displayName || "-"} (${c.email})</button>
+    ${
+      c.defaultAddress?.company
+        ? `<span class="company">🏢 ${c.defaultAddress.company}</span>`
+        : ""
+    }
+    ${c.note ? `<span class="note">– ${L.customerNo}: ${c.note}</span>` : ""}
+  </form>
+</div>`
+        )
+        .join("")
+    : `<p>${L.noCustomers}</p>`
+}
 </div>
 
 <script>
@@ -211,13 +282,19 @@ function filter(){
 
 </body>
 </html>
-`);
+  `);
 });
 
 // -------- GO --------
 app.post("/go", (req, res) => {
-  const token = multipass({ email: req.body.email, created_at: new Date().toISOString() });
-  res.redirect(`https://${process.env.SHOPIFY_CUSTOM_DOMAIN || "b2b.wusthof.com"}/account/login/multipass/${token}`);
+  const token = multipass({
+    email: req.body.email,
+    created_at: new Date().toISOString(),
+  });
+
+  res.redirect(
+    `https://${process.env.SHOPIFY_CUSTOM_DOMAIN || "b2b.wusthof.com"}/account/login/multipass/${token}`
+  );
 });
 
 // ================= START =================
