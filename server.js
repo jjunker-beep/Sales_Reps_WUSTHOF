@@ -97,9 +97,7 @@ app.get("/customers", async (req, res) => {
     }
   `);
 
-  const list = data.customers.nodes.filter(
-    (c) => c.metafield?.value?.toLowerCase() === req.session.email
-  );
+  const list = data.customers.nodes;
 
   res.send(`
     <h2>Meine Kunden</h2>
