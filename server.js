@@ -203,7 +203,14 @@ app.get("/customers", async (req, res) => {
         <button type="submit">
           ${c.displayName || "(ohne Namen)"} (${c.email})
         </button>
-        ${c.note ? `<span class="note">– Nr.: ${c.note}</span>` : ""}
+        ${c.defaultAddress?.company
+  ? `<span class="note">🏢 ${c.defaultAddress.company}</span>`
+  : ""
+}
+${c.note
+  ? `<span class="note"> – Nr.: ${c.note}</span>`
+  : ""
+}
       </form>
     </div>
   `
