@@ -194,28 +194,30 @@ app.get("/customers", async (req, res) => {
 <div id="customer-list">
   ${
     customers.length
-      ? customers
-          .map(
-            (c) => `
-    <div class="customer">
-      <form method="post" action="/go">
-        <input type="hidden" name="email" value="${c.email}">
-        <button type="submit">
-          ${c.displayName || "(ohne Namen)"} (${c.email})
-        </button>
-        ${c.defaultAddress?.company
-  ? `<span class="note">🏢 ${c.defaultAddress.company}</span>`
-  : ""
-}
-${c.note
-  ? `<span class="note"> – Nr.: ${c.note}</span>`
-  : ""
-}
-      </form>
-    </div>
-  `
-          )
-          .join("")
+      ${customers
+  .map(
+    (c) => `
+  <div class="customer">
+    <form method="post" action="/go">
+      <input type="hidden" name="email" value="${c.email}">
+      <button type="submit">
+        ${c.displayName || "(ohne Namen)"} (${c.email})
+      </button>
+
+      ${c.defaultAddress?.company
+        ? `<span class="note">🏢 ${c.defaultAddress.company}</span>`
+        : ""
+      }
+
+      ${c.note
+        ? `<span class="note"> – Nr.: ${c.note}</span>`
+        : ""
+      }
+    </form>
+  </div>
+`
+  )
+  .join("")}
       : `<div class="empty">Keine Kunden zugeordnet.</div>`
   }
 </div>
