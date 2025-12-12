@@ -21,7 +21,7 @@ app.use(
 );
 
 // ================= CONFIG =================
-const SHOP = process.env.SHOPIFY_SHOP; // z.B. b2b.wusthof.com
+const SHOP = process.env.SHOPIFY_SHOP; // myshopify.com Domain!
 const TOKEN = process.env.SHOPIFY_ADMIN_ACCESS_TOKEN;
 const API_VERSION = process.env.SHOPIFY_API_VERSION || "2025-01";
 const HASH = bcrypt.hashSync(
@@ -63,6 +63,7 @@ async function fetchCustomers(after = null) {
         nodes {
           email
           displayName
+          note
         }
       }
     }
@@ -138,7 +139,6 @@ app.post("/login", (req, res) => {
 app.get("/customers", async (req, res) => {
   if (!req.session.email) return res.redirect("/login");
 
-  // 🔥 HIER: alle Kunden via Pagination (max 500)
   const customers = await getAllCustomers(500);
 
   res.send(`
@@ -148,9 +148,10 @@ app.get("/customers", async (req, res) => {
   <title>Meine Kunden</title>
   <style>
     body { font-family: Arial, sans-serif; padding: 20px; }
-    input { padding: 8px; width: 360px; margin-bottom: 16px; }
-    .customer { margin-bottom: 8px; }
+    input { padding: 8px; width: 380px; margin-bottom: 16px; }
+    .customer { margin-bottom: 10px; }
     button { padding: 8px 12px; cursor: pointer; }
+    .note { color: #555; font-size: 13px; margin-left: 6px; }
   </style>
 </head>
 <body>
@@ -160,7 +161,7 @@ app.get("/customers", async (req, res) => {
 <input
   type="text"
   id="search"
-  placeholder="Kunde suchen (Name oder E-Mail)"
+  placeholder="Kunde suchen (Name, E-Mail oder Kundennummer)"
   onkeyup="filterCustomers()"
 />
 
@@ -174,6 +175,11 @@ app.get("/customers", async (req, res) => {
         <button type="submit">
           ${c.displayName || "(ohne Namen)"} (${c.email})
         </button>
+        ${
+          c.note
+            ? `<span class="note">– Nr.: ${c.note}</span>`
+            : ""
+        }
       </form>
     </div>
   `
