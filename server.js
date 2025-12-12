@@ -21,8 +21,7 @@ app.use(
 );
 
 // ================= CONFIG =================
-// WICHTIG: Admin API immer über myshopify.com
-const SHOP = process.env.SHOPIFY_SHOP; // z.B. wusthof-wholesale-germany.myshopify.com
+const SHOP = process.env.SHOPIFY_SHOP; // *.myshopify.com
 const TOKEN = process.env.SHOPIFY_ADMIN_ACCESS_TOKEN;
 const API_VERSION = process.env.SHOPIFY_API_VERSION || "2025-01";
 const HASH = bcrypt.hashSync(
@@ -65,6 +64,9 @@ async function fetchCustomers(after = null) {
           email
           displayName
           note
+          defaultAddress {
+            company
+          }
           metafields(first: 10, namespace: "custom") {
             nodes {
               key
@@ -104,7 +106,7 @@ function customerBelongsToRep(customer, repEmail) {
 
   return mf.value
     .toLowerCase()
-    .split(/[\n,;]/) // erlaubt Zeilenumbruch, Komma, Semikolon
+    .split(/[\n,;]/)
     .map((v) => v.trim())
     .includes(repEmail.toLowerCase());
 }
@@ -155,13 +157,12 @@ app.post("/login", (req, res) => {
   res.redirect("/customers");
 });
 
-// -------- CUSTOMERS (mit Sales-Rep-Filter) --------
+// -------- CUSTOMERS --------
 app.get("/customers", async (req, res) => {
   if (!req.session.email) return res.redirect("/login");
 
   const allCustomers = await getAllCustomers(1000);
 
-  // 🔐 ZUORDNUNG ÜBER METAFELD custom.sales_reps
   const customers = allCustomers.filter((c) =>
     customerBelongsToRep(c, req.session.email)
   );
@@ -177,6 +178,7 @@ app.get("/customers", async (req, res) => {
     .customer { margin-bottom: 10px; }
     button { padding: 8px 12px; cursor: pointer; }
     .note { color: #555; font-size: 13px; margin-left: 6px; }
+    .company { color: #333; font-size: 13px; margin-left: 6px; }
     .empty { color: #777; margin-top: 20px; }
   </style>
 </head>
@@ -187,7 +189,7 @@ app.get("/customers", async (req, res) => {
 <input
   type="text"
   id="search"
-  placeholder="Kunde suchen (Name, E-Mail oder Kundennummer)"
+  placeholder="Kunde suchen (Name, Firma, E-Mail, Kundennummer)"
   onkeyup="filterCustomers()"
 />
 
@@ -203,7 +205,16 @@ app.get("/customers", async (req, res) => {
         <button type="submit">
           ${c.displayName || "(ohne Namen)"} (${c.email})
         </button>
-        ${c.note ? `<span class="note">– Nr.: ${c.note}</span>` : ""}
+
+        ${c.defaultAddress?.company
+          ? `<span class="company">🏢 ${c.defaultAddress.company}</span>`
+          : ""
+        }
+
+        ${c.note
+          ? `<span class="note">– Nr.: ${c.note}</span>`
+          : ""
+        }
       </form>
     </div>
   `
@@ -229,15 +240,16 @@ app.get("/customers", async (req, res) => {
   `);
 });
 
-// -------- GO (MULTIPASS) --------
+// -------- GO --------
 app.post("/go", (req, res) => {
   const token = multipass({
     email: req.body.email,
     created_at: new Date().toISOString(),
   });
 
-  // Multipass-Login nutzt eure Custom Domain automatisch
-  res.redirect(`https://${process.env.SHOPIFY_CUSTOM_DOMAIN || "b2b.wusthof.com"}/account/login/multipass/${token}`);
+  res.redirect(
+    `https://${process.env.SHOPIFY_CUSTOM_DOMAIN || "b2b.wusthof.com"}/account/login/multipass/${token}`
+  );
 });
 
 // ================= START =================
