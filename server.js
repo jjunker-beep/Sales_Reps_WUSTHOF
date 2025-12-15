@@ -35,7 +35,7 @@ const t = {
     loginTitle: "Sales Login",
     email: "E-Mail",
     password: "Passwort",
-    login: "Login",
+    login: "Einloggen",
     customerNo: "Nr.",
   },
   en: {
@@ -61,7 +61,7 @@ const t = {
 };
 
 function lang(req) {
-  return t[req.session.lang] || t.en;
+  return t[req.session.lang] || t.de;
 }
 
 // ================= SHOPIFY GQL =================
@@ -130,7 +130,9 @@ function multipass(payload) {
   const iv = crypto.randomBytes(16);
   const cipher = crypto.createCipheriv("aes-128-cbc", key.slice(0,16), iv);
   const encrypted = Buffer.concat([cipher.update(JSON.stringify(payload)), cipher.final()]);
-  const sig = crypto.createHmac("sha256", key.slice(16)).update(Buffer.concat([iv, encrypted])).digest();
+  const sig = crypto.createHmac("sha256", key.slice(16))
+    .update(Buffer.concat([iv, encrypted]))
+    .digest();
   return Buffer.concat([iv, encrypted, sig]).toString("base64url");
 }
 
@@ -146,18 +148,76 @@ app.get("/lang/:l", (req, res) => {
 app.get("/login", (req, res) => {
   const L = lang(req);
   res.send(`
-    <h2>${L.loginTitle}</h2>
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+body {
+  font-family: Arial, sans-serif;
+  background:#f4f4f4;
+}
+.container {
+  max-width:420px;
+  margin:80px auto;
+  background:#3e3642;
+  padding:30px;
+  color:#fff;
+  border-radius:6px;
+}
+.logo {
+  text-align:center;
+  margin-bottom:20px;
+}
+input {
+  width:100%;
+  padding:10px;
+  margin-bottom:12px;
+}
+button {
+  width:100%;
+  padding:10px;
+  background:#e30613;
+  color:#fff;
+  border:none;
+  cursor:pointer;
+}
+.lang {
+  text-align:center;
+  margin-bottom:15px;
+}
+.lang a { color:#fff; margin:0 6px; }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="logo">
+    <img src="https://cdn.shopify.com/s/files/1/0553/2323/9806/files/wuesthof_logo.svg" width="140">
+  </div>
+
+  <h3>${L.loginTitle}</h3>
+
+  <div class="lang">
     <a href="/lang/de">DE</a> | <a href="/lang/en">EN</a> | <a href="/lang/fr">FR</a>
-    <form method="post">
-      <input name="email" placeholder="${L.email}" required><br><br>
-      <input name="password" type="password" placeholder="${L.password}" required><br><br>
-      <button>${L.login}</button>
-    </form>
-  `);
+  </div>
+
+  <form method="post">
+    <input name="email" placeholder="${L.email}" required>
+    <input name="password" type="password" placeholder="${L.password}" required>
+    <button>${L.login}</button>
+  </form>
+</div>
+
+</body>
+</html>
+`);
 });
 
+// -------- LOGIN POST --------
 app.post("/login", (req, res) => {
-  if (!bcrypt.compareSync(req.body.password, HASH)) return res.send("Wrong password");
+  if (!bcrypt.compareSync(req.body.password, HASH)) {
+    return res.send("Wrong password");
+  }
   req.session.email = req.body.email.toLowerCase();
   res.redirect("/customers");
 });
@@ -175,29 +235,74 @@ app.get("/customers", async (req, res) => {
 <html>
 <head>
 <style>
-body { font-family: Arial; padding:20px }
-.customer { margin-bottom:10px }
-.note, .company { font-size:13px; margin-left:6px }
+body {
+  font-family: Arial, sans-serif;
+  background:#f4f4f4;
+}
+.wrapper {
+  max-width:900px;
+  margin:40px auto;
+  background:#fff;
+  padding:30px;
+  border-radius:6px;
+}
+.header {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+input {
+  width:100%;
+  padding:10px;
+  margin:20px 0;
+}
+.customer {
+  padding:12px;
+  border-bottom:1px solid #ddd;
+}
+button {
+  background:#e30613;
+  color:#fff;
+  border:none;
+  padding:6px 12px;
+  cursor:pointer;
+}
+.note, .company {
+  font-size:13px;
+  color:#555;
+  margin-left:6px;
+}
+.lang a { margin-left:10px; }
 </style>
 </head>
 <body>
 
-<h2>${L.title} (${customers.length})</h2>
-<a href="/lang/de">DE</a> | <a href="/lang/en">EN</a> | <a href="/lang/fr">FR</a><br><br>
-
-<input id="search" placeholder="${L.search}" onkeyup="filter()">
-
-<div>
-${customers.length ? customers.map(c => `
-  <div class="customer">
-    <form method="post" action="/go">
-      <input type="hidden" name="email" value="${c.email}">
-      <button>${c.displayName || "-"} (${c.email})</button>
-      ${c.defaultAddress?.company ? `<span class="company">🏢 ${c.defaultAddress.company}</span>` : ""}
-      ${c.note ? `<span class="note">– ${L.customerNo}: ${c.note}</span>` : ""}
-    </form>
+<div class="wrapper">
+  <div class="header">
+    <h2>${L.title} (${customers.length})</h2>
+    <div class="lang">
+      <a href="/lang/de">DE</a>
+      <a href="/lang/en">EN</a>
+      <a href="/lang/fr">FR</a>
+    </div>
   </div>
-`).join("") : `<p>${L.noCustomers}</p>`}
+
+  <input id="search" placeholder="${L.search}" onkeyup="filter()">
+
+  ${
+    customers.length
+      ? customers.map(c => `
+    <div class="customer">
+      <form method="post" action="/go">
+        <button>${c.displayName || "-"} (${c.email})</button>
+        ${c.defaultAddress?.company ? `<span class="company">🏢 ${c.defaultAddress.company}</span>` : ""}
+        ${c.note ? `<span class="note">– ${L.customerNo}: ${c.note}</span>` : ""}
+        <input type="hidden" name="email" value="${c.email}">
+      </form>
+    </div>
+  `).join("")
+      : `<p>${L.noCustomers}</p>`
+  }
 </div>
 
 <script>
@@ -217,7 +322,9 @@ function filter(){
 // -------- GO --------
 app.post("/go", (req, res) => {
   const token = multipass({ email: req.body.email, created_at: new Date().toISOString() });
-  res.redirect(`https://${process.env.SHOPIFY_CUSTOM_DOMAIN || "b2b.wusthof.com"}/account/login/multipass/${token}`);
+  res.redirect(
+    `https://${process.env.SHOPIFY_CUSTOM_DOMAIN || "b2b.wusthof.com"}/account/login/multipass/${token}`
+  );
 });
 
 // ================= START =================
