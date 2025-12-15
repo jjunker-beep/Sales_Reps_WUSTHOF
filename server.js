@@ -20,6 +20,10 @@ app.use(
   })
 );
 
+
+// ✅ DAS WAR NOCH NICHT DRIN
+app.use(express.static("public"));
+
 // ================= CONFIG =================
 const SHOP = process.env.SHOPIFY_SHOP;
 const TOKEN = process.env.SHOPIFY_ADMIN_ACCESS_TOKEN;
@@ -192,7 +196,7 @@ button {
 
 <div class="container">
   <div class="logo">
-    <img src="https://cdn.shopify.com/s/files/1/0553/2323/9806/files/wuesthof_logo.svg" width="140">
+    <img src="/wusthof-logo.jpg" width="140">
   </div>
 
   <h3>${L.loginTitle}</h3>
