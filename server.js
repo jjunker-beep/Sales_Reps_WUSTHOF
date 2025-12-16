@@ -120,12 +120,15 @@ async function getAllCustomers(limit = 1000) {
 // ================= SALES REP FILTER =================
 function customerBelongsToRep(customer, repEmail) {
   const mf = customer.metafields?.nodes?.find(m => m.key === "sales_reps");
-  if (!mf?.value) return false;
-  return mf.value
+  if (!mf || !mf.value) return false;
+
+  const reps = mf.value
     .toLowerCase()
-    .split(/[\n,;]/)
+    .split(/[\n,;]/)     // Zeilenumbruch, Komma, Semikolon erlaubt
     .map(v => v.trim())
-    .includes(repEmail.toLowerCase());
+    .filter(Boolean);    // entfernt leere Einträge
+
+  return reps.includes(repEmail.toLowerCase());
 }
 
 // ================= MULTIPASS =================
