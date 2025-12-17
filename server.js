@@ -328,7 +328,11 @@ function filter(){
 
 // -------- GO --------
 app.post("/go", (req, res) => {
-  const token = multipass({ email: req.body.email, created_at: new Date().toISOString() });
+  const token = multipass({
+  email: req.body.email,
+  identifier: `salesrep:${req.session.email}`, // 👈 ENTSCHEIDEND
+  created_at: new Date().toISOString()
+});
   res.redirect(
     `https://${process.env.SHOPIFY_CUSTOM_DOMAIN || "b2b.wusthof.com"}/account/login/multipass/${token}`
   );
