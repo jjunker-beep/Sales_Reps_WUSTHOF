@@ -328,7 +328,17 @@ function filter(){
 
 // -------- GO --------
 // -------- GO --------
-app.post("/go", (req, res) => { const token = multipass({ email: req.body.email, created_at: new Date().toISOString() }); res.redirect( https://${process.env.SHOPIFY_CUSTOM_DOMAIN || "b2b.wusthof.com"}/account/login/multipass/${token} ); });
+app.post("/go", (req, res) => {
+  const token = multipass({
+    email: req.body.email,
+    created_at: new Date().toISOString(),
+    return_to: "/?sales_portal=1"
+  });
+
+  res.redirect(
+    `https://${process.env.SHOPIFY_CUSTOM_DOMAIN || "b2b.wusthof.com"}/account/login/multipass/${token}`
+  );
+});
 
 // ================= START =================
 app.listen(process.env.PORT || 10000, () =>
