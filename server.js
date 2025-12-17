@@ -327,8 +327,23 @@ function filter(){
 });
 
 // -------- GO --------
+// -------- GO --------
 app.post("/go", (req, res) => {
-  const token = multipass({ email: req.body.email, created_at: new Date().toISOString() });
+
+  // ✅ Cookie für Shopify setzen
+  res.cookie("sales_portal_login", "1", {
+    domain: ".wusthof.com",   // WICHTIG: muss zur Shop-Domain passen
+    path: "/",
+    maxAge: 2 * 60 * 60 * 1000, // 2 Stunden
+    sameSite: "lax",
+    secure: true
+  });
+
+  const token = multipass({
+    email: req.body.email,
+    created_at: new Date().toISOString()
+  });
+
   res.redirect(
     `https://${process.env.SHOPIFY_CUSTOM_DOMAIN || "b2b.wusthof.com"}/account/login/multipass/${token}`
   );
